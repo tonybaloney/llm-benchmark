@@ -28,13 +28,12 @@ $ llm benchmark -m azure/ant-grok-3-mini -m azure/ants-gpt-4.1-mini -m github/gp
 For a single pass (no repeats) you will get a summary table:
 
 
-|                         |                 | Time to First   | Length of       | Number of       |
-|               Benchmark | Total Time      | Chunk           | Response        | Chunks          |
-|-------------------------|-----------------|-----------------|-----------------|-----------------|
-|   azure/ant-grok-3-mini | 6.96            | 6.96            | 3               | 3               |
-| azure/ants-gpt-4.1-mini | 2.53            | 2.37            | 53              | 15              |
-|     github/gpt-4.1-mini | 2.29            | 2.29            | 53              | 15              |
-|     github/gpt-4.1-nano | 2.24            | 2.24            | 52              | 17              |
+|               Benchmark | Total Time      | Time to First Chunk | Length of Response | Number of Chunks |
+|-------------------------|-----------------|---------------------|--------------------|------------------|
+|   azure/ant-grok-3-mini | 6.96            | 6.96                | 3                  | 3                |
+| azure/ants-gpt-4.1-mini | 2.53            | 2.37                | 53                 | 15               |
+|     github/gpt-4.1-mini | 2.29            | 2.29                | 53                 | 15               |
+|     github/gpt-4.1-nano | 2.24            | 2.24                | 52                 | 17               |
 
 To repeat each benchmark and get an average of times, use the `--repeat` argument:
 
