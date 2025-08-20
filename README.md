@@ -51,6 +51,18 @@ To repeat each benchmark and get an average of times, use the `--repeat` argumen
 
 The printout is a range (min <-> max (x̄=mean))
 
+### Providing options
+
+You can provide key/value options for all models using the `--option` flag. This can be useful for setting parameters like temperature, max tokens, etc.
+
+Example:
+
+```bash
+$ llm benchmark -m gpt-4.1-mini -m gpt-4.1-nano --option temperature 0.7 --option max_tokens 100 "Give me a friendly hello message"
+```
+
+This feature is also helpful for setting the `seed` option for reproducibility and isolating variances in time to first chunk and time to completion with the same prompt and result.
+
 ### Markdown formatted results
 
 By default, tables are printed with color showing the fastest and slowest metric in a benchmark:

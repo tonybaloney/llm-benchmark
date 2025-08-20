@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import Any
 
 import click
 import llm
@@ -27,6 +28,17 @@ class BenchmarkData(BaseModel):
     n_chunks: int = 1
     chunks_per_sec: float = 0.0
 
+def build_options(cli_options, model) -> dict[str, Any]:
+    validated_options = {}
+    if cli_options:
+        validated_options = {
+            key: value
+            for key, value in model.Options(**dict(cli_options))
+            if value is not None
+        }
+
+    return validated_options
+
 @llm.hookimpl
 def register_commands(cli):
     @cli.command("benchmark", short_help="Benchmark one or many models")
@@ -36,7 +48,15 @@ def register_commands(cli):
     @click.option("-s", "--system", help="System prompt to use")
     @click.option("--repeat", default=1, help="Number of times to repeat the benchmark")
     @click.option("--markdown", help="Use markdown table format", is_flag=True)
-    def benchmark(prompt: str, models: tuple[str, ...], no_stream: bool, system: str, repeat: int, markdown: bool):
+    @click.option(
+        "options",
+        "-o",
+        "--option",
+        type=(str, str),
+        multiple=True,
+        help="key/value options for all models",
+    )
+    def benchmark(prompt: str, models: tuple[str, ...], no_stream: bool, system: str, repeat: int, markdown: bool, options: tuple[tuple[str, str], ...]):
         # Resolve the models
 
         resolved_models = {model: llm.get_model(model) for model in models}
@@ -50,7 +70,7 @@ def register_commands(cli):
         for _ in track(range(repeat), description="Running Benchmarks...", console=console):
 
             for model_name, model in resolved_models.items():
-                kwargs = {}
+                kwargs = build_options(options, model)
 
                 should_stream = model.can_stream and not no_stream
                 if not should_stream:
