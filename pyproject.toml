@@ -1,6 +1,6 @@
 [project]
 name = "llm-profile"
-version = "0.1.1"
+version = "0.2.0"
 description = "LLM benchmarking tools for the LLM CLI"
 readme = "README.md"
 authors = [{name = "Anthony Shaw"}]

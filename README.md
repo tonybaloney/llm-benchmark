@@ -18,32 +18,36 @@ or using `llm`
 llm install llm-profile
 ```
 
+## Metrics
+
+- Total time - The time taken from the request to the end of the final chunk
+- Time to First Chunk - The time taken from the request to the first chunk of the response
+- Length of Response - The length of the response text
+- Number of Chunks - The number of chunks in the response
+- Chunks per Second - The number of chunks divided by the total time taken
+
 ## Benchmark Usage
 
 To run a benchmark, provide the prompt along with any number of models using the llm alias (from `llm models`):
 
 ```bash
-$ llm benchmark -m azure/ant-grok-3-mini -m azure/ants-gpt-4.1-mini -m github/gpt-4.1-mini -m github/gpt-4.1-nano -s "Respond in emoji" "Give me a friendly hello message" --markdown
+$ llm benchmark -m azure/ant-grok-3-mini -m azure/ants-gpt-4.1-mini -s "Respond in emoji" "Give me a friendly hello message" --markdown
 ```
 
 For a single pass (no repeats) you will get a summary table:
 
 
-|               Benchmark | Total Time      | Time to First Chunk | Length of Response | Number of Chunks |
-|-------------------------|-----------------|---------------------|--------------------|------------------|
-|   azure/ant-grok-3-mini | 6.96            | 6.96                | 3                  | 3                |
-| azure/ants-gpt-4.1-mini | 2.53            | 2.37                | 53                 | 15               |
-|     github/gpt-4.1-mini | 2.29            | 2.29                | 53                 | 15               |
-|     github/gpt-4.1-nano | 2.24            | 2.24                | 52                 | 17               |
+|               Benchmark | Total Time                | Time to First Chunk       | Length of Response        | Number of Chunks          | Chunks per Second         |
+|-------------------------|---------------------------|---------------------------|---------------------------|---------------------------|---------------------------|
+|   azure/ant-grok-3-mini | 7.79                      | 7.76                      | 112                       | 30                        | 3.85                      |
+| azure/ants-gpt-4.1-mini | 2.99                      | 2.80                      | 78                        | 19                        | 6.36                      |
 
 To repeat each benchmark and get an average of times, use the `--repeat` argument:
 
-|               Benchmark | Total Time                | Time to First Chunk       | Length of Response        | Number of Chunks          |
-|-------------------------|---------------------------|---------------------------|---------------------------|---------------------------|
-|   azure/ant-grok-3-mini | 3.71 <-> 8.82 (x̄=6.26)    | 3.69 <-> 8.81 (x̄=6.25)    | 2 <-> 2 (x̄=2.00)          | 2 <-> 2 (x̄=2.00)          |
-| azure/ants-gpt-4.1-mini | 0.52 <-> 3.31 (x̄=1.91)    | 0.34 <-> 3.13 (x̄=1.73)    | 53 <-> 54 (x̄=53.50)       | 15 <-> 15 (x̄=15.00)       |
-|     github/gpt-4.1-mini | 1.79 <-> 2.33 (x̄=2.06)    | 1.78 <-> 2.33 (x̄=2.06)    | 53 <-> 53 (x̄=53.00)       | 15 <-> 16 (x̄=15.50)       |
-|     github/gpt-4.1-nano | 1.82 <-> 2.06 (x̄=1.94)    | 1.82 <-> 2.06 (x̄=1.94)    | 3 <-> 3 (x̄=3.00)          | 4 <-> 4 (x̄=4.00)          |
+|               Benchmark | Total Time                | Time to First Chunk       | Length of Response        | Number of Chunks          | Chunks per Second         |
+|-------------------------|---------------------------|---------------------------|---------------------------|---------------------------|---------------------------|
+|   azure/ant-grok-3-mini | 2.59 <-> 8.39 (x̄=5.49)    | 2.57 <-> 8.36 (x̄=5.47)    | 65 <-> 109 (x̄=87.00)      | 18 <-> 30 (x̄=24.00)       | 2.15 <-> 11.58 (x̄=6.86)   |
+| azure/ants-gpt-4.1-mini | 0.54 <-> 2.88 (x̄=1.71)    | 0.26 <-> 2.69 (x̄=1.47)    | 76 <-> 78 (x̄=77.00)       | 19 <-> 19 (x̄=19.00)       | 6.60 <-> 35.17 (x̄=20.89)  |
 
 The printout is a range (min <-> max (x̄=mean))
 
