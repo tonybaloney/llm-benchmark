@@ -27,7 +27,7 @@ benchmark = "llm_benchmark"
 test = ["pytest", "pytest-recording", "pytest-asyncio", "ruff", "pyright"]
 
 [tool.ruff]
-line-length = 100
+line-length = 200
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
