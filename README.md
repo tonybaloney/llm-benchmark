@@ -9,16 +9,16 @@ The commands runs a prompt with optional system prompt for several models and co
 You can install the plugin using pip:
 
 ```bash
-pip install llm-perf
+pip install llm-profile
 ```
 
 or using `llm`
 
 ```bash
-llm install llm-perf
+llm install llm-profile
 ```
 
-## Usage
+## Benchmark Usage
 
 To run a benchmark, provide the prompt along with any number of models using the llm alias (from `llm models`):
 

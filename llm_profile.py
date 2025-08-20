@@ -41,6 +41,9 @@ def register_commands(cli):
         resolved_models = {model: llm.get_model(model) for model in models}
         stats = defaultdict(list)
 
+        if repeat < 1:
+            repeat = 1  # nice try
+
         console = Console(width=150)
 
         for _ in track(range(repeat), description="Running Benchmarks...", console=console):

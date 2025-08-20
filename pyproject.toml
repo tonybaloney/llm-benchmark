@@ -1,5 +1,5 @@
 [project]
-name = "llm-perf"
+name = "llm-profile"
 version = "0.1.0"
 description = "LLM benchmarking tools for the LLM CLI"
 readme = "README.md"
@@ -15,13 +15,13 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/tonybaloney/llm-perf"
-Changelog = "https://github.com/tonybaloney/llm-perf/releases"
-Issues = "https://github.com/tonybaloney/llm-perf/issues"
-CI = "https://github.com/tonybaloney/llm-perf/actions"
+Homepage = "https://github.com/tonybaloney/llm-profile"
+Changelog = "https://github.com/tonybaloney/llm-profile/releases"
+Issues = "https://github.com/tonybaloney/llm-profile/issues"
+CI = "https://github.com/tonybaloney/llm-profile/actions"
 
 [project.entry-points.llm]
-benchmark = "llm_perf"
+profile = "llm_profile"
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-recording", "pytest-asyncio", "ruff", "pyright"]
