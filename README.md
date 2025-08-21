@@ -75,3 +75,16 @@ If you want to customize the output, you can use the `--markdown` flag to get th
 
 If you want to benchmark models that do not support streaming, you can use the `--no-stream` flag. This will disable streaming and provide a single response time.
 
+### Graphs
+
+The benchmark tool can produce a PNG graph like this:
+
+![benchmark graph](docs/res/graph.png)
+
+To get a graph, add the `--graph file.png` with the path to the results graph file. You will need to install `matplotlib` to generate the graph.
+
+```bash
+$ pip install matplotlib
+```
+
+matplotlib isn't installed by default to keep the dependencies for this plugin smaller.
