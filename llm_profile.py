@@ -334,7 +334,7 @@ def _prepare_datasets(stats: StatsData):
     titles = ["Total Time (s)", "Time to First Chunk (s)", "Length of Response", "Chunks per Second"]
     ylabels = ["Seconds", "Seconds", "Characters", "Chunks/sec"]
 
-    return [model.name for model in models], datasets, titles, ylabels
+    return [model.name[:20] for model in models], datasets, titles, ylabels
 
 
 def _build_colors(model_names, cm):
@@ -354,8 +354,7 @@ def _draw_boxplot(ax, data, labels, colors, title, ylabel):
     bplot = ax.boxplot(data, patch_artist=True, labels=labels)
 
     for patch, color in zip(bplot.get("boxes", []), colors):
-        if hasattr(patch, "set_facecolor"):
-            patch.set_facecolor(color)
+        patch.set_facecolor(color)
         patch.set_edgecolor("black")
         patch.set_alpha(0.8)
 
@@ -387,7 +386,7 @@ def plot_stats_boxplots(stats: StatsData, save_path: str, figsize=(12, 10)):
 
     colors, model_to_color = _build_colors(model_names, cm)
 
-    fig, axes = plt.subplots(2, 2, figsize=figsize, constrained_layout=True)
+    fig, axes = plt.subplots(2, 2, figsize=figsize)  # , constrained_layout=True)
     axes = axes.flatten()
 
     for ax, data, title, ylabel in zip(axes, datasets, titles, ylabels):
