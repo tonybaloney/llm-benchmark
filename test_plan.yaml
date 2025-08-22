@@ -1,0 +1,13 @@
+name: Capital Cities
+models:
+  - name: GPT-5-mini (Azerbaijan)
+    model: azure/gpt-5-mini
+    prompt: "What is the capital of Azerbaijan?"
+  - name: GPT-5-mini (France)
+    model: azure/gpt-5-mini
+    prompt: "What is the capital of France?"
+  - name: GPT-5-mini (France max_output=10)
+    model: azure/gpt-5-mini
+    prompt: "What is the capital of France?"
+    options:
+      temperature: 0.5
