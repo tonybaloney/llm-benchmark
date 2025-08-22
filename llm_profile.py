@@ -232,8 +232,6 @@ def create_benchmark_table(console: Console, stats: StatsData, repeat: int, no_s
     box = MARKDOWN if markdown else HEAVY_HEAD
     table = Table(title=f"Benchmarks, repeat={repeat}, number={len(stats)}", box=box)
 
-    col_width = 25
-
     table.add_column("Benchmark", justify="right", style="cyan", no_wrap=True)
     table.add_column("Total Time", min_width=25)
     table.add_column("Time to First Chunk", min_width=25)
@@ -323,20 +321,20 @@ def _import_matplotlib():
 
 def _prepare_datasets(stats: StatsData):
     """Return model_names, datasets, titles and ylabels prepared from stats."""
-    model_names = list(stats.keys())
-    if not model_names:
+    models = list(stats.keys())
+    if not models:
         raise ValueError("stats must contain at least one model with benchmark data")
 
-    total_time_data = [[d.total_time for d in stats[m]] for m in model_names]
-    ttfc_data = [[d.time_to_first_chunk for d in stats[m]] for m in model_names]
-    length_data = [[d.length_of_response for d in stats[m]] for m in model_names]
-    cps_data = [[d.chunks_per_sec for d in stats[m]] for m in model_names]
+    total_time_data = [[d.total_time for d in stats[m]] for m in models]
+    ttfc_data = [[d.time_to_first_chunk for d in stats[m]] for m in models]
+    length_data = [[d.length_of_response for d in stats[m]] for m in models]
+    cps_data = [[d.chunks_per_sec for d in stats[m]] for m in models]
 
     datasets = [total_time_data, ttfc_data, length_data, cps_data]
     titles = ["Total Time (s)", "Time to First Chunk (s)", "Length of Response", "Chunks per Second"]
     ylabels = ["Seconds", "Seconds", "Characters", "Chunks/sec"]
 
-    return model_names, datasets, titles, ylabels
+    return [model.name for model in models], datasets, titles, ylabels
 
 
 def _build_colors(model_names, cm):
