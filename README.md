@@ -91,7 +91,13 @@ matplotlib isn't installed by default to keep the dependencies for this plugin s
 
 ### Test Plans
 
-Instead of providing tests and scenarios on the command line you can provide a YAML
+Instead of providing tests and scenarios on the command line you can provide a YAML file with the benchmark plan:
+
+```bash
+$ llm benchmark --plan plan.yaml
+```
+
+To get a printout of exactly what will be tested, use the `--verbose` option.
 
 A single-plan YAML file (one plan mapping):
 
