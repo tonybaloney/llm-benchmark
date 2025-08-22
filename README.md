@@ -81,10 +81,10 @@ The benchmark tool can produce a PNG graph like this:
 
 ![benchmark graph](docs/res/graph.png)
 
-To get a graph, add the `--graph file.png` with the path to the results graph file. You will need to install `matplotlib` to generate the graph.
+To get a graph, add the `--graph file.png` with the path to the results graph file. You will need to install `matplotlib` to generate the graph:
 
 ```bash
-$ pip install matplotlib
+$ pip install llm-profile[graph]
 ```
 
 matplotlib isn't installed by default to keep the dependencies for this plugin smaller.
