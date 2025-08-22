@@ -1,13 +1,21 @@
 name: Capital Cities
 models:
-  - name: GPT-5-mini (Azerbaijan)
-    model: azure/gpt-5-mini
+  - name: GPT-5-chat (Azerbaijan)
+    model: azure/gpt-5-chat
     prompt: "What is the capital of Azerbaijan?"
-  - name: GPT-5-mini (France)
-    model: azure/gpt-5-mini
+  - name: GPT-5-chat (France)
+    model: azure/gpt-5-chat
     prompt: "What is the capital of France?"
-  - name: GPT-5-mini (France max_output=10)
-    model: azure/gpt-5-mini
+  - name: GPT-5-chat (one word)
+    model: azure/gpt-5-chat
+    system: "Only respond with 1 word answers"
+    prompt: "What is the capital of France?"
+  - name: GPT-5-chat (low temp)
+    model: azure/gpt-5-chat
     prompt: "What is the capital of France?"
     options:
       temperature: 0.5
+system: "You are a helpful little robot"
+repeat: 3
+options:
+  temperature: 0.9

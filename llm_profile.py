@@ -69,7 +69,7 @@ def build_plan_from_args(
             TestModel(
                 name=model.model_id,
                 model=model.model_id,
-                options=build_options(options, model),
+                options=dict(options),
             )
             for model in models
         ],
@@ -101,6 +101,7 @@ def register_commands(cli):
     @click.option("--markdown", help="Use markdown table format", is_flag=True)
     @click.option("-g", "--graph", help="Save a graph of the results to the file path provided", type=str)
     @click.option("-p", "--plan", help="Path to a test plan YAML file", type=str, required=False)
+    @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
     @click.option(
         "options",
         "-o",
@@ -119,6 +120,7 @@ def register_commands(cli):
         options: tuple[tuple[str, str], ...],
         graph: str,
         plan: str,
+        verbose: bool,
     ):
         # Resolve the models
 
@@ -135,31 +137,34 @@ def register_commands(cli):
 
         console = Console()
 
-        console.print("Plan:")
-        console.print(test_plan)
+        if verbose:
+            console.print("Plan:")
+            console.print(test_plan)
 
-        stats = execute_plan(test_plan, console)
+        stats = execute_plan(test_plan, console, no_stream=no_stream, verbose=verbose)
 
-        create_benchmark_table(console, stats, repeat, no_stream, markdown)
+        create_benchmark_table(console, stats, test_plan.repeat, no_stream, markdown)
 
         if graph:
             plot_stats_boxplots(stats, save_path=graph)
-            console.print(f"Saved plot as {graph}")
+            if verbose:
+                console.print(f"Saved plot as {graph}")
 
 
-def execute_plan(plan: TestPlan, console: Console, no_stream: bool = False) -> StatsData:  # noqa: C901
+def execute_plan(plan: TestPlan, console: Console, no_stream: bool = False, verbose: bool = False) -> StatsData:  # noqa: C901
     stats: StatsData = defaultdict(list)
     for _ in track(range(plan.repeat), description="Running Benchmarks...", console=console):
         for test_model in plan.models:
-            kwargs = plan.options.copy() if plan.options else {}
-            kwargs.update(test_model.options if test_model.options else {})
-
             model = llm.get_model(test_model.model)
+
+            kwargs = build_options(plan.options.copy() if plan.options else {}, model)
+            kwargs.update(build_options(test_model.options if test_model.options else {}, model))
 
             should_stream = model.can_stream and not no_stream
             if not should_stream:
                 kwargs["stream"] = False
-            logging.debug(f"Prompting model {test_model.name} with options: {kwargs}")
+            if verbose:
+                console.print(f"Prompting model {test_model.name} with options: {kwargs}")
             start = perf_counter()
             response = model.prompt(
                 test_model.prompt if test_model.prompt else plan.prompt,

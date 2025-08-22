@@ -88,3 +88,96 @@ $ pip install matplotlib
 ```
 
 matplotlib isn't installed by default to keep the dependencies for this plugin smaller.
+
+### Test Plans
+
+Instead of providing tests and scenarios on the command line you can provide a YAML
+
+A single-plan YAML file (one plan mapping):
+
+```yaml
+name: Capital Cities  # required
+repeat: 3 # optional, defaults to 1
+system: "You are a helpful assistant." # optional
+prompt: "Answer concisely." # optional, defaults to model.prompt
+options: # optional, must be options which apply to all models
+  max_output_tokens: 50
+
+models:
+  - name: GPT-5-mini (Azerbaijan) # required, used for graphs and tables
+    model: azure/gpt-5-mini # required, llm ID from `llm models
+    prompt: "What is the capital of Azerbaijan?" # Optional, defaults to plan prompt
+
+  # Example of second model test in plan
+  - name: GPT-5-mini (France, short) 
+    model: azure/gpt-5-mini
+    prompt: "What is the capital of France?"
+    options:
+      max_output_tokens: 10 # overrides plan options by key
+```
+
+Field reference
+
+- `name` (string, required) — Plan label used in output.
+- `models` (list of mappings, required) — Each entry is a `TestModel` with the fields below.
+- `repeat` (int, optional) — Number of times to repeat the plan (default: 1).
+- `system` (string, optional) — Global system prompt for all models unless `model.system` is set.
+- `prompt` (string, optional) — Global prompt for all models unless `model.prompt` is set.
+- `options` (mapping, optional) — Plan-level option defaults (merged with each model’s `options`).
+
+`model` entries (per item in `models`):
+
+- `name` (string, required) — Label shown in tables/plots.
+- `model` (string, required) — Model identifier passed to `llm.get_model(...)`.
+- `system` (string, optional) — Model-specific system prompt (overrides plan-level `system`).
+- `prompt` (string, optional) — Model-specific prompt (overrides plan-level `prompt`).
+- `options` (mapping, optional) — Model-specific options (override plan-level `options`).
+
+Behavior notes
+
+- Per-model `options` override plan-level `options`. The code merges plan options then model options before prompting.
+- If a model doesn’t set `prompt`/`system`, the plan-level `prompt`/`system` are used.
+- Option keys and types are validated at runtime against the model’s `Options` schema (see `build_options` / `model.Options`).
+
+#### Example 1: Comparing prompts
+
+This test will test the same model with different prompts:
+
+```yaml
+name: Prompt Comparison
+models:
+  - name: Capital of Azerbaijan
+    model: azure/gpt-5-chat
+    prompt: "What is the capital of Azerbaijan?"
+  - name: Capital of France
+    model: azure/gpt-5-chat
+    prompt: "What is the capital of France?"
+repeat: 5
+```
+
+#### Example 2: Several Models, one with overrides on options
+
+```yaml
+name: Capital Cities
+models:
+  - name: GPT-5-chat (Azerbaijan)
+    model: azure/gpt-5-chat
+    prompt: "What is the capital of Azerbaijan?"
+  - name: GPT-5-chat (France)
+    model: azure/gpt-5-chat
+    prompt: "What is the capital of France?"
+  - name: GPT-5-chat (one word)
+    model: azure/gpt-5-chat
+    system: "Only respond with 1 word answers"
+    prompt: "What is the capital of France?"
+  - name: GPT-5-chat (low temp)
+    model: azure/gpt-5-chat
+    prompt: "What is the capital of France?"
+    options:
+      temperature: 0.5
+system: "You are a helpful little robot"
+repeat: 3
+options:
+  temperature: 0.9
+```
+
