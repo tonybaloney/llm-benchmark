@@ -306,20 +306,7 @@ def create_benchmark_table(console: Console, stats: StatsData, repeat: int, no_s
     console.print(table)
 
 
-def _import_matplotlib():
-    """Dynamically import matplotlib modules so matplotlib is optional at runtime."""
-    import importlib
-
-    try:
-        plt = importlib.import_module("matplotlib.pyplot")
-        mpatches = importlib.import_module("matplotlib.patches")
-        cm = importlib.import_module("matplotlib.cm")
-        return plt, mpatches, cm
-    except Exception as exc:
-        raise RuntimeError("matplotlib is required to create plots (pip install matplotlib)") from exc
-
-
-def _prepare_datasets(stats: StatsData):
+def _prepare_datasets(stats: StatsData) -> tuple[list[tuple[str, str]], list[list[float]], list[str], list[str]]:
     """Return model_names, datasets, titles and ylabels prepared from stats."""
     models = list(stats.keys())
     if not models:
@@ -334,22 +321,38 @@ def _prepare_datasets(stats: StatsData):
     titles = ["Total Time (s)", "Time to First Chunk (s)", "Length of Response", "Chunks per Second"]
     ylabels = ["Seconds", "Seconds", "Characters", "Chunks/sec"]
 
-    return [model.name[:20] for model in models], datasets, titles, ylabels
+    # To keep the x-labels small, use a key (A, B, C, D etc.) then use that key in the legend
+    return (
+        [
+            (chr(65 + key_offset), f"{chr(65 + key_offset)}: {model.name[:40]}")
+            for key_offset, model in enumerate(models)
+        ],
+        datasets,
+        titles,
+        ylabels,
+    )
 
 
-def _build_colors(model_names, cm):
+ColorMappedColor = tuple[float, float, float, float]  # RGBA tuple
+
+
+def _build_colors(model_names: list[tuple[str, str]]) -> tuple[list[ColorMappedColor], dict[str, ColorMappedColor]]:
     """Return a list of colors and a name->color mapping for the models."""
+
+    from matplotlib import cm
+
     cmap = cm.get_cmap("tab10" if len(model_names) <= 10 else "tab20")
+
     if len(model_names) == 1:
-        colors = [cmap(0.0)]
+        colors = [cmap(0.0)]  # black
     else:
         max_idx = max(1, len(model_names) - 1)
         colors = [cmap(i / max_idx) for i in range(len(model_names))]
-    model_to_color = {name: colors[i] for i, name in enumerate(model_names)}
+    model_to_color = {name[0]: colors[i] for i, name in enumerate(model_names)}
     return colors, model_to_color
 
 
-def _draw_boxplot(ax, data, labels, colors, title, ylabel):
+def _draw_boxplot(ax, data: list[float], labels: list[str], colors: list[ColorMappedColor], title: str, ylabel: str):
     """Draw and style a single boxplot on the given Axes."""
     bplot = ax.boxplot(data, patch_artist=True, labels=labels)
 
@@ -380,21 +383,24 @@ def plot_stats_boxplots(stats: StatsData, save_path: str, figsize=(12, 10)):
     """
     Orchestrate creation of the 2x2 boxplots for the given StatsData using the helper functions.
     """
-    plt, mpatches, cm = _import_matplotlib()
+    try:
+        import matplotlib.patches as mpatches
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise RuntimeError("matplotlib is required to create plots (pip install matplotlib)") from exc
 
     model_names, datasets, titles, ylabels = _prepare_datasets(stats)
 
-    colors, model_to_color = _build_colors(model_names, cm)
+    colors, model_to_color = _build_colors(model_names)
 
-    fig, axes = plt.subplots(2, 2, figsize=figsize)  # , constrained_layout=True)
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
     axes = axes.flatten()
 
     for ax, data, title, ylabel in zip(axes, datasets, titles, ylabels):
-        _draw_boxplot(ax, data, model_names, colors, title, ylabel)
+        _draw_boxplot(ax, data, [n[0] for n in model_names], colors, title, ylabel)
 
     legend_handles = [
-        mpatches.Patch(facecolor=model_to_color[name], edgecolor="black", label=name) for name in model_names
+        mpatches.Patch(facecolor=model_to_color[name[0]], edgecolor="black", label=name[1]) for name in model_names
     ]
-    fig.legend(handles=legend_handles, loc="upper center", ncol=min(len(model_names), 6), bbox_to_anchor=(0.5, 1.02))
-
+    fig.legend(handles=legend_handles, loc="upper center", ncol=min(len(model_names), 6))
     fig.savefig(save_path)
