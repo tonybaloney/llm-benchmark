@@ -102,6 +102,7 @@ def register_commands(cli):
     @click.option("-g", "--graph", help="Save a graph of the results to the file path provided", type=str)
     @click.option("-p", "--plan", help="Path to a test plan YAML file", type=str, required=False)
     @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
+    @click.option("--no-repeat-first", is_flag=True, help="Do not repeat the first test")
     @click.option(
         "options",
         "-o",
@@ -121,6 +122,7 @@ def register_commands(cli):
         graph: str,
         plan: str,
         verbose: bool,
+        no_repeat_first: bool,
     ):
         # Resolve the models
 
@@ -141,7 +143,7 @@ def register_commands(cli):
             console.print("Plan:")
             console.print(test_plan)
 
-        stats = execute_plan(test_plan, console, no_stream=no_stream, verbose=verbose)
+        stats = execute_plan(test_plan, console, no_stream=no_stream, verbose=verbose, repeat_first=not no_repeat_first)
 
         create_benchmark_table(console, stats, test_plan.repeat, no_stream, markdown)
 
@@ -151,68 +153,77 @@ def register_commands(cli):
                 console.print(f"Saved plot as {graph}")
 
 
-def execute_plan(plan: TestPlan, console: Console, no_stream: bool = False, verbose: bool = False) -> StatsData:  # noqa: C901
+def execute_test(
+    test_model: TestModel, plan: TestPlan, console: Console, no_stream: bool, verbose: bool
+) -> BenchmarkData:
+    model = llm.get_model(test_model.model)
+
+    kwargs = build_options(plan.options.copy() if plan.options else {}, model)
+    kwargs.update(build_options(test_model.options if test_model.options else {}, model))
+
+    should_stream = model.can_stream and not no_stream
+    if not should_stream:
+        kwargs["stream"] = False
+    if verbose:
+        console.print(f"Prompting model {test_model.name} with options: {kwargs}")
+    start = perf_counter()
+    response = model.prompt(
+        test_model.prompt if test_model.prompt else plan.prompt,
+        system=test_model.system if test_model.system else plan.system,
+        # Things we don't support here
+        # fragments=resolved_fragments,
+        # attachments=resolved_attachments,
+        # schema=schema,
+        # system_fragments=resolved_system_fragments,
+        **kwargs,
+    )
+    n_chunks = 0
+    first_chunk_start = None
+    text = ""
+    if should_stream:
+        first_chunk = True
+        try:
+            for chunk in response:
+                if first_chunk:
+                    first_chunk_start = perf_counter()
+                    first_chunk = False
+                text += chunk
+                n_chunks += 1
+        except Exception as e:
+            logging.error(f"Error occurred while streaming response from model {test_model.name}: {e}")
+
+    else:
+        try:
+            text = response.text()
+            n_chunks = 1
+        except Exception as e:
+            logging.error(f"Error occurred while getting response text from model {test_model.name}: {e}")
+
+    end = perf_counter()
+    if first_chunk_start is None:  # Errored
+        first_chunk_start = end
+    total_time = end - start
+    return BenchmarkData(
+        model_name=test_model.name,
+        time_to_first_chunk=first_chunk_start - start if should_stream else 0,
+        total_time=total_time,
+        length_of_response=len(text),
+        n_chunks=n_chunks,
+        chunks_per_sec=n_chunks / total_time if total_time > 0 else 0,
+    )
+
+
+def execute_plan(
+    plan: TestPlan, console: Console, no_stream: bool = False, verbose: bool = False, repeat_first=True
+) -> StatsData:
     stats: StatsData = defaultdict(list)
+    first = True
     for _ in track(range(plan.repeat), description="Running Benchmarks...", console=console):
         for test_model in plan.models:
-            model = llm.get_model(test_model.model)
-
-            kwargs = build_options(plan.options.copy() if plan.options else {}, model)
-            kwargs.update(build_options(test_model.options if test_model.options else {}, model))
-
-            should_stream = model.can_stream and not no_stream
-            if not should_stream:
-                kwargs["stream"] = False
-            if verbose:
-                console.print(f"Prompting model {test_model.name} with options: {kwargs}")
-            start = perf_counter()
-            response = model.prompt(
-                test_model.prompt if test_model.prompt else plan.prompt,
-                system=test_model.system if test_model.system else plan.system,
-                # Things we don't support here
-                # fragments=resolved_fragments,
-                # attachments=resolved_attachments,
-                # schema=schema,
-                # system_fragments=resolved_system_fragments,
-                **kwargs,
-            )
-            n_chunks = 0
-            first_chunk_start = None
-            text = ""
-            if should_stream:
-                first_chunk = True
-                try:
-                    for chunk in response:
-                        if first_chunk:
-                            first_chunk_start = perf_counter()
-                            first_chunk = False
-                        text += chunk
-                        n_chunks += 1
-                except Exception as e:
-                    logging.error(f"Error occurred while streaming response from model {test_model.name}: {e}")
-
-            else:
-                try:
-                    text = response.text()
-                    n_chunks = 1
-                except Exception as e:
-                    logging.error(f"Error occurred while getting response text from model {test_model.name}: {e}")
-
-            end = perf_counter()
-            if first_chunk_start is None:  # Errored
-                first_chunk_start = end
-            total_time = end - start
-
-            stats[test_model].append(
-                BenchmarkData(
-                    model_name=test_model.name,
-                    time_to_first_chunk=first_chunk_start - start if should_stream else 0,
-                    total_time=total_time,
-                    length_of_response=len(text),
-                    n_chunks=n_chunks,
-                    chunks_per_sec=n_chunks / total_time if total_time > 0 else 0,
-                )
-            )
+            if first and repeat_first:
+                execute_test(test_model, plan, console, no_stream, verbose)
+                first = False
+            stats[test_model].append(execute_test(test_model, plan, console, no_stream, verbose))
     return stats
 
 

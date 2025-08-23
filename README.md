@@ -75,6 +75,12 @@ If you want to customize the output, you can use the `--markdown` flag to get th
 
 If you want to benchmark models that do not support streaming, you can use the `--no-stream` flag. This will disable streaming and provide a single response time.
 
+### Warmup
+
+By default, the first test will be repeated and only the second timing data will be used. This is to allow the model to setup authentication or anything else which will skew the performance metrics.
+
+You can disable this behavior by using the `--no-repeat-first` flag.
+
 ### Graphs
 
 The benchmark tool can produce a PNG graph like this:
