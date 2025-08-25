@@ -95,6 +95,34 @@ $ pip install llm-profile[graph]
 
 matplotlib isn't installed by default to keep the dependencies for this plugin smaller.
 
+### Saving results
+
+You can save the benchmark results, including the text from each prompt to a YAML file using the `--output` option:
+
+```bash
+$ llm benchmark --output results.yaml
+```
+
+All of the timing data for each request as well as the text response will be saved in the YAML file:
+
+```yaml
+GPT-5-chat (Azerbaijan):
+- chunks_per_sec: 19.549590468140675
+  length_of_response: 34
+  model_name: GPT-5-chat (Azerbaijan)
+  n_chunks: 9
+  text: The capital of Azerbaijan is Baku.
+  time_to_first_chunk: 0.36127520000445656
+  total_time: 0.46036770001228433
+- chunks_per_sec: 20.64352283058553
+  length_of_response: 34
+  model_name: GPT-5-chat (Azerbaijan)
+  n_chunks: 9
+  text: The capital of Azerbaijan is Baku.
+  time_to_first_chunk: 0.3545127999968827
+  total_time: 0.43597210000734776
+```
+
 ### Test Plans
 
 Instead of providing tests and scenarios on the command line you can provide a YAML file with the benchmark plan:
