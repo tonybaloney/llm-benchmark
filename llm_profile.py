@@ -4,6 +4,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import click
 import llm
+from llm.models import EmbeddingModel
 from pydantic import BaseModel
 from rich.box import HEAVY_HEAD, MARKDOWN
 from rich.progress import track
@@ -41,7 +42,18 @@ class TestModel(BaseModel):
         return hash(self.name)
 
 
-class TestPlan(BaseModel):
+class LoadableMixin:
+    @classmethod
+    def load_file(cls, path: str):
+        import yaml
+
+        with open(path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+
+        return cls.model_validate(data)  # pyright: ignore[reportAttributeAccessIssue]
+
+
+class TestPlan(BaseModel, LoadableMixin):
     name: str
     models: List[TestModel]
     repeat: int = 1
@@ -50,14 +62,25 @@ class TestPlan(BaseModel):
     prompt: Optional[str] = None
     options: Optional[Dict[str, Any]] = None
 
-    @classmethod
-    def load_file(cls, path: str):
-        import yaml
 
-        with open(path, "r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
+class BenchmarkEmbedData(BaseModel):
+    model_name: str
+    total_time: float
 
-        return cls.model_validate(data)
+
+class TestEmbedModel(BaseModel):
+    name: str
+    model: str
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+
+class TestEmbedPlan(BaseModel, LoadableMixin):
+    name: str
+    models: List[TestEmbedModel]
+    repeat: int = 1
+    data: str
 
 
 def build_plan_from_args(
@@ -79,6 +102,21 @@ def build_plan_from_args(
     )
 
 
+def build_embed_plan_from_args(data: str, models: Iterable[EmbeddingModel], repeat: int) -> TestEmbedPlan:
+    return TestEmbedPlan(
+        name="CLI Embed Plan",
+        models=[
+            TestEmbedModel(
+                name=model.model_id,
+                model=model.model_id,
+            )
+            for model in models
+        ],
+        repeat=repeat,
+        data=data,
+    )
+
+
 def build_options(cli_options, model) -> dict[str, Any]:
     validated_options = {}
     if cli_options:
@@ -88,6 +126,7 @@ def build_options(cli_options, model) -> dict[str, Any]:
 
 
 StatsData = dict[TestModel, list[BenchmarkData]]
+EmbedStatsData = dict[TestEmbedModel, list[BenchmarkEmbedData]]
 
 
 @llm.hookimpl
@@ -152,6 +191,51 @@ def register_commands(cli):
             if verbose:
                 console.print(f"Saved plot as {graph}")
 
+    @cli.command("embed-benchmark", short_help="Benchmark one or many embedding models")
+    @click.argument("data", type=str, required=False)
+    @click.option("--model", "-m", "models", multiple=True, help="Model names to benchmark")
+    @click.option("--repeat", default=1, help="Number of times to repeat the benchmark")
+    @click.option("--markdown", help="Use markdown table format", is_flag=True)
+    @click.option("-g", "--graph", help="Save a graph of the results to the file path provided", type=str)
+    @click.option("-p", "--plan", help="Path to a test plan YAML file", type=str, required=False)
+    @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
+    @click.option("--no-repeat-first", is_flag=True, help="Do not repeat the first test")
+    def embed_benchmark(
+        data: str,
+        models: tuple[str, ...],
+        repeat: int,
+        markdown: bool,
+        graph: str,
+        plan: str,
+        verbose: bool,
+        no_repeat_first: bool,
+    ):
+        # Resolve the models
+
+        if data:
+            if repeat < 1:
+                repeat = 1  # nice try
+            test_plan = build_embed_plan_from_args(data, [llm.get_embedding_model(model) for model in models], repeat)
+        else:
+            if not plan:
+                raise ValueError("No input or --plan provided")
+            test_plan = TestEmbedPlan.load_file(plan)
+
+        console = Console()
+
+        if verbose:
+            console.print("Plan:")
+            console.print(test_plan)
+
+        stats = execute_embed_plan(test_plan, console, verbose=verbose, repeat_first=not no_repeat_first)
+
+        create_embed_benchmark_table(console, stats, test_plan.repeat, markdown)
+
+        if graph:
+            # plot_stats_boxplots(stats, save_path=graph)
+            if verbose:
+                console.print(f"Saved plot as {graph}")
+
 
 def execute_test(
     test_model: TestModel, plan: TestPlan, console: Console, no_stream: bool, verbose: bool
@@ -213,6 +297,27 @@ def execute_test(
     )
 
 
+def execute_embed_test(
+    test_model: TestEmbedModel, plan: TestEmbedPlan, console: Console, verbose: bool
+) -> BenchmarkEmbedData:
+    model = llm.get_embedding_model(test_model.model)
+
+    if verbose:
+        console.print(f"Embedding model {test_model.name}")
+    start = perf_counter()
+    try:
+        _ = model.embed(plan.data)
+    except Exception as e:
+        logging.error(f"Error occurred while getting response text from model {test_model.name}: {e}")
+
+    end = perf_counter()
+    total_time = end - start
+    return BenchmarkEmbedData(
+        model_name=test_model.name,
+        total_time=total_time,
+    )
+
+
 def execute_plan(
     plan: TestPlan, console: Console, no_stream: bool = False, verbose: bool = False, repeat_first=True
 ) -> StatsData:
@@ -224,6 +329,20 @@ def execute_plan(
                 execute_test(test_model, plan, console, no_stream, verbose)
                 first = False
             stats[test_model].append(execute_test(test_model, plan, console, no_stream, verbose))
+    return stats
+
+
+def execute_embed_plan(
+    plan: TestEmbedPlan, console: Console, verbose: bool = False, repeat_first=True
+) -> EmbedStatsData:
+    stats: EmbedStatsData = defaultdict(list)
+    first = True
+    for _ in track(range(plan.repeat), description="Running Benchmarks...", console=console):
+        for test_model in plan.models:
+            if first and repeat_first:
+                execute_embed_test(test_model, plan, console, verbose)
+                first = False
+            stats[test_model].append(execute_embed_test(test_model, plan, console, verbose))
     return stats
 
 
@@ -310,6 +429,48 @@ def create_benchmark_table(console: Console, stats: StatsData, repeat: int, no_s
                 Text(
                     f"{cps_min:.2f} <-> {cps_max:.2f} (x̄={cps_mean:.2f})" if cps_mean > 0 else "-",
                     style=(get_col_color(test_model.name, best_model_cps.name, worst_model_cps.name) or ""),
+                ),
+            )
+        console.print("Key: Best Model (green), Worst Model (red). (min <-> max (x̄=mean)")
+
+    console.print(table)
+
+
+def create_embed_benchmark_table(console: Console, stats: EmbedStatsData, repeat: int, markdown: bool):
+    box = MARKDOWN if markdown else HEAVY_HEAD
+    table = Table(title=f"Benchmarks, repeat={repeat}, number={len(stats)}", box=box)
+
+    table.add_column("Benchmark", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Total Time", min_width=25)
+
+    # Repeated benchmarks and single-pass is quite different, don't so min/max/mean for single pass. Keep the UI simple
+
+    # Calculate model with worst and best stats so we can color them red/green
+    best_model_total_time = min(stats.items(), key=lambda x: fmean(stat.total_time for stat in x[1]))[0]
+    worst_model_total_time = max(stats.items(), key=lambda x: fmean(stat.total_time for stat in x[1]))[0]
+
+    if repeat == 1:
+        for test_model, model_stats in stats.items():
+            table.add_row(
+                test_model.name,
+                Text(
+                    f"{model_stats[0].total_time:.2f}",
+                    style=(
+                        get_col_color(test_model.name, best_model_total_time.name, worst_model_total_time.name) or ""
+                    ),
+                ),
+            )
+    else:
+        for test_model, model_stats in stats.items():
+            total_time_min, total_time_max, total_time_mean = min_max_mean([stat.total_time for stat in model_stats])
+
+            table.add_row(
+                test_model.name,
+                Text(
+                    f"{total_time_min:.2f} <-> {total_time_max:.2f} (x̄={total_time_mean:.2f})",
+                    style=(
+                        get_col_color(test_model.name, best_model_total_time.name, worst_model_total_time.name) or ""
+                    ),
                 ),
             )
         console.print("Key: Best Model (green), Worst Model (red). (min <-> max (x̄=mean)")
