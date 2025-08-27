@@ -4,6 +4,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import click
 import llm
+import yaml
 from pydantic import BaseModel
 from rich.box import HEAVY_HEAD, MARKDOWN
 from rich.progress import track
@@ -28,6 +29,7 @@ class BenchmarkData(BaseModel):
     length_of_response: int
     n_chunks: int = 1
     chunks_per_sec: float = 0.0
+    text: str = ""
 
 
 class TestModel(BaseModel):
@@ -101,6 +103,7 @@ def register_commands(cli):
     @click.option("--markdown", help="Use markdown table format", is_flag=True)
     @click.option("-g", "--graph", help="Save a graph of the results to the file path provided", type=str)
     @click.option("-p", "--plan", help="Path to a test plan YAML file", type=str, required=False)
+    @click.option("--output", help="Path to a YAML file containing the results", type=str, required=False)
     @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
     @click.option("--no-repeat-first", is_flag=True, help="Do not repeat the first test")
     @click.option(
@@ -121,6 +124,7 @@ def register_commands(cli):
         options: tuple[tuple[str, str], ...],
         graph: str,
         plan: str,
+        output: str,
         verbose: bool,
         no_repeat_first: bool,
     ):
@@ -151,6 +155,13 @@ def register_commands(cli):
             plot_stats_boxplots(stats, save_path=graph)
             if verbose:
                 console.print(f"Saved plot as {graph}")
+
+        if output:
+            result_stats = {k.name: [r.model_dump() for r in v] for k, v in stats.items()}
+            with open(output, "w") as f:
+                yaml.dump(result_stats, f)
+            if verbose:
+                console.print(f"Saved results as {output}")
 
 
 def execute_test(
@@ -210,6 +221,7 @@ def execute_test(
         length_of_response=len(text),
         n_chunks=n_chunks,
         chunks_per_sec=n_chunks / total_time if total_time > 0 else 0,
+        text=text,
     )
 
 
