@@ -241,7 +241,7 @@ def register_commands(cli):
         create_embed_benchmark_table(console, stats, test_plan.repeat, markdown)
 
         if graph:
-            # plot_stats_boxplots(stats, save_path=graph)
+            plot_embed_boxplot(stats, save_path=graph)
             if verbose:
                 console.print(f"Saved plot as {graph}")
 
@@ -585,4 +585,51 @@ def plot_stats_boxplots(stats: StatsData, save_path: str, figsize=(12, 10)):
         mpatches.Patch(facecolor=model_to_color[name[0]], edgecolor="black", label=name[1]) for name in model_names
     ]
     fig.legend(handles=legend_handles, loc="upper center", ncol=min(len(model_names), 6))
+    fig.savefig(save_path)
+
+
+def plot_embed_boxplot(stats: EmbedStatsData, save_path: str, figsize=(10, 8)):
+    """
+    Create a single boxplot (total_time) for embedding benchmark data.
+
+    - stats: mapping TestEmbedModel -> list[BenchmarkEmbedData]
+    - save_path: path to write the PNG
+    - figsize: matplotlib figure size
+    - show: whether to call plt.show()
+
+    The function uses the same short-key mapping (A:, B:, ...) and a legend that maps
+    keys back to full model names, and tries to avoid clipping long legend labels.
+    """
+    try:
+        import matplotlib.patches as mpatches
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise RuntimeError("matplotlib is required to create plots (pip install matplotlib)") from exc
+
+    models = list(stats.keys())
+    if not models:
+        raise ValueError("stats must contain at least one model with benchmark data")
+
+    # Build short keys and legend entries
+    model_keys = [(chr(65 + idx), f"{chr(65 + idx)}: {m.name[:60]}") for idx, m in enumerate(models)]
+
+    # Dataset is a list per model of total_time values
+    dataset = [[d.total_time for d in stats[m]] for m in models]
+
+    # Build colors and mapping using existing helper
+    colors, model_to_color = _build_colors(model_keys)
+
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+
+    # Draw the boxplot using the short keys as x labels
+    _draw_boxplot(ax, dataset, [k[0] for k in model_keys], colors, "Total Time (s)", "Seconds")
+
+    legend_handles = [mpatches.Patch(facecolor=model_to_color[k[0]], edgecolor="black", label=k[1]) for k in model_keys]
+
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        ncol=2,
+    )
+
     fig.savefig(save_path)

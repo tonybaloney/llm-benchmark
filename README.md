@@ -221,3 +221,46 @@ options:
   temperature: 0.9
 ```
 
+## Embedding Benchmarks
+
+As well as language models, you can benchmark embedding models using a similar approach. The main difference is in the input data and the model selection.
+
+To see available embedding models, use the `llm embed-models` command.
+
+Give this list to the `llm embed-benchmark` command like so:
+
+```bash
+$ llm embed-benchmark "I'm on the red eye flight to nowhere. How about you?" -m  azure/text-embedding-3-small-512 -m  azure/text-embedding-3-small -m azure/text-embedding-ada-002 -m nomic-embed-text:latest --repeat 2 --markdown --graph embed-graph.png
+```
+
+This provides a comparison table:
+
+|                        Benchmark | Total Time                |
+|----------------------------------|---------------------------|
+| azure/text-embedding-3-small-512 | 0.26 <-> 0.93 (x̄=0.59)    |
+|     azure/text-embedding-3-small | 0.91 <-> 3.45 (x̄=2.18)    |
+|     azure/text-embedding-ada-002 | 0.92 <-> 3.49 (x̄=2.20)    |
+|          nomic-embed-text:latest | 1.03 <-> 1.15 (x̄=1.09)    |
+
+As well as a graph:
+
+![Graph](/docs/res/embed-graph.png)
+
+### Embedding Model Plans
+
+You can provide a YAML file with the benchmark configuration for embedding models in a similar way to language models:
+
+```yaml
+name: Embedding Benchmark
+data: "The input to the embedding model"
+models:
+  - name: Azure Text Embedding 3 Small 512
+    model: azure/text-embedding-3-small-512
+  - name: Azure Text Embedding 3 Small
+    model: azure/text-embedding-3-small
+  - name: Azure Text Embedding ADA 002
+    model: azure/text-embedding-ada-002
+  - name: Nomic Embed Text Latest
+    model: nomic-embed-text:latest
+repeat: 2
+```
