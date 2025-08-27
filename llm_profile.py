@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterable, List, Optional
 import click
 import llm
 import yaml
+from llm.models import EmbeddingModel
 from pydantic import BaseModel
 from rich.box import HEAVY_HEAD, MARKDOWN
 from rich.progress import track
@@ -43,7 +44,16 @@ class TestModel(BaseModel):
         return hash(self.name)
 
 
-class TestPlan(BaseModel):
+class LoadableMixin:
+    @classmethod
+    def load_file(cls, path: str):
+        with open(path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+
+        return cls.model_validate(data)  # pyright: ignore[reportAttributeAccessIssue]
+
+
+class TestPlan(BaseModel, LoadableMixin):
     name: str
     models: List[TestModel]
     repeat: int = 1
@@ -52,14 +62,25 @@ class TestPlan(BaseModel):
     prompt: Optional[str] = None
     options: Optional[Dict[str, Any]] = None
 
-    @classmethod
-    def load_file(cls, path: str):
-        import yaml
 
-        with open(path, "r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
+class BenchmarkEmbedData(BaseModel):
+    model_name: str
+    total_time: float
 
-        return cls.model_validate(data)
+
+class TestEmbedModel(BaseModel):
+    name: str
+    model: str
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+
+class TestEmbedPlan(BaseModel, LoadableMixin):
+    name: str
+    models: List[TestEmbedModel]
+    repeat: int = 1
+    data: str
 
 
 def build_plan_from_args(
@@ -81,6 +102,21 @@ def build_plan_from_args(
     )
 
 
+def build_embed_plan_from_args(data: str, models: Iterable[EmbeddingModel], repeat: int) -> TestEmbedPlan:
+    return TestEmbedPlan(
+        name="CLI Embed Plan",
+        models=[
+            TestEmbedModel(
+                name=model.model_id,
+                model=model.model_id,
+            )
+            for model in models
+        ],
+        repeat=repeat,
+        data=data,
+    )
+
+
 def build_options(cli_options, model) -> dict[str, Any]:
     validated_options = {}
     if cli_options:
@@ -90,6 +126,7 @@ def build_options(cli_options, model) -> dict[str, Any]:
 
 
 StatsData = dict[TestModel, list[BenchmarkData]]
+EmbedStatsData = dict[TestEmbedModel, list[BenchmarkEmbedData]]
 
 
 @llm.hookimpl
@@ -163,6 +200,51 @@ def register_commands(cli):
             if verbose:
                 console.print(f"Saved results as {output}")
 
+    @cli.command("embed-benchmark", short_help="Benchmark one or many embedding models")
+    @click.argument("data", type=str, required=False)
+    @click.option("--model", "-m", "models", multiple=True, help="Model names to benchmark")
+    @click.option("--repeat", default=1, help="Number of times to repeat the benchmark")
+    @click.option("--markdown", help="Use markdown table format", is_flag=True)
+    @click.option("-g", "--graph", help="Save a graph of the results to the file path provided", type=str)
+    @click.option("-p", "--plan", help="Path to a test plan YAML file", type=str, required=False)
+    @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
+    @click.option("--no-repeat-first", is_flag=True, help="Do not repeat the first test")
+    def embed_benchmark(
+        data: str,
+        models: tuple[str, ...],
+        repeat: int,
+        markdown: bool,
+        graph: str,
+        plan: str,
+        verbose: bool,
+        no_repeat_first: bool,
+    ):
+        # Resolve the models
+
+        if data:
+            if repeat < 1:
+                repeat = 1  # nice try
+            test_plan = build_embed_plan_from_args(data, [llm.get_embedding_model(model) for model in models], repeat)
+        else:
+            if not plan:
+                raise ValueError("No input or --plan provided")
+            test_plan = TestEmbedPlan.load_file(plan)
+
+        console = Console()
+
+        if verbose:
+            console.print("Plan:")
+            console.print(test_plan)
+
+        stats = execute_embed_plan(test_plan, console, verbose=verbose, repeat_first=not no_repeat_first)
+
+        create_embed_benchmark_table(console, stats, test_plan.repeat, markdown)
+
+        if graph:
+            plot_embed_boxplot(stats, save_path=graph)
+            if verbose:
+                console.print(f"Saved plot as {graph}")
+
 
 def execute_test(
     test_model: TestModel, plan: TestPlan, console: Console, no_stream: bool, verbose: bool
@@ -225,6 +307,27 @@ def execute_test(
     )
 
 
+def execute_embed_test(
+    test_model: TestEmbedModel, plan: TestEmbedPlan, console: Console, verbose: bool
+) -> BenchmarkEmbedData:
+    model = llm.get_embedding_model(test_model.model)
+
+    if verbose:
+        console.print(f"Embedding model {test_model.name}")
+    start = perf_counter()
+    try:
+        _ = model.embed(plan.data)
+    except Exception as e:
+        logging.error(f"Error occurred while getting response text from model {test_model.name}: {e}")
+
+    end = perf_counter()
+    total_time = end - start
+    return BenchmarkEmbedData(
+        model_name=test_model.name,
+        total_time=total_time,
+    )
+
+
 def execute_plan(
     plan: TestPlan, console: Console, no_stream: bool = False, verbose: bool = False, repeat_first=True
 ) -> StatsData:
@@ -236,6 +339,20 @@ def execute_plan(
                 execute_test(test_model, plan, console, no_stream, verbose)
                 first = False
             stats[test_model].append(execute_test(test_model, plan, console, no_stream, verbose))
+    return stats
+
+
+def execute_embed_plan(
+    plan: TestEmbedPlan, console: Console, verbose: bool = False, repeat_first=True
+) -> EmbedStatsData:
+    stats: EmbedStatsData = defaultdict(list)
+    first = True
+    for _ in track(range(plan.repeat), description="Running Benchmarks...", console=console):
+        for test_model in plan.models:
+            if first and repeat_first:
+                execute_embed_test(test_model, plan, console, verbose)
+                first = False
+            stats[test_model].append(execute_embed_test(test_model, plan, console, verbose))
     return stats
 
 
@@ -322,6 +439,48 @@ def create_benchmark_table(console: Console, stats: StatsData, repeat: int, no_s
                 Text(
                     f"{cps_min:.2f} <-> {cps_max:.2f} (x̄={cps_mean:.2f})" if cps_mean > 0 else "-",
                     style=(get_col_color(test_model.name, best_model_cps.name, worst_model_cps.name) or ""),
+                ),
+            )
+        console.print("Key: Best Model (green), Worst Model (red). (min <-> max (x̄=mean)")
+
+    console.print(table)
+
+
+def create_embed_benchmark_table(console: Console, stats: EmbedStatsData, repeat: int, markdown: bool):
+    box = MARKDOWN if markdown else HEAVY_HEAD
+    table = Table(title=f"Benchmarks, repeat={repeat}, number={len(stats)}", box=box)
+
+    table.add_column("Benchmark", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Total Time", min_width=25)
+
+    # Repeated benchmarks and single-pass is quite different, don't so min/max/mean for single pass. Keep the UI simple
+
+    # Calculate model with worst and best stats so we can color them red/green
+    best_model_total_time = min(stats.items(), key=lambda x: fmean(stat.total_time for stat in x[1]))[0]
+    worst_model_total_time = max(stats.items(), key=lambda x: fmean(stat.total_time for stat in x[1]))[0]
+
+    if repeat == 1:
+        for test_model, model_stats in stats.items():
+            table.add_row(
+                test_model.name,
+                Text(
+                    f"{model_stats[0].total_time:.2f}",
+                    style=(
+                        get_col_color(test_model.name, best_model_total_time.name, worst_model_total_time.name) or ""
+                    ),
+                ),
+            )
+    else:
+        for test_model, model_stats in stats.items():
+            total_time_min, total_time_max, total_time_mean = min_max_mean([stat.total_time for stat in model_stats])
+
+            table.add_row(
+                test_model.name,
+                Text(
+                    f"{total_time_min:.2f} <-> {total_time_max:.2f} (x̄={total_time_mean:.2f})",
+                    style=(
+                        get_col_color(test_model.name, best_model_total_time.name, worst_model_total_time.name) or ""
+                    ),
                 ),
             )
         console.print("Key: Best Model (green), Worst Model (red). (min <-> max (x̄=mean)")
@@ -426,4 +585,51 @@ def plot_stats_boxplots(stats: StatsData, save_path: str, figsize=(12, 10)):
         mpatches.Patch(facecolor=model_to_color[name[0]], edgecolor="black", label=name[1]) for name in model_names
     ]
     fig.legend(handles=legend_handles, loc="upper center", ncol=min(len(model_names), 6))
+    fig.savefig(save_path)
+
+
+def plot_embed_boxplot(stats: EmbedStatsData, save_path: str, figsize=(10, 8)):
+    """
+    Create a single boxplot (total_time) for embedding benchmark data.
+
+    - stats: mapping TestEmbedModel -> list[BenchmarkEmbedData]
+    - save_path: path to write the PNG
+    - figsize: matplotlib figure size
+    - show: whether to call plt.show()
+
+    The function uses the same short-key mapping (A:, B:, ...) and a legend that maps
+    keys back to full model names, and tries to avoid clipping long legend labels.
+    """
+    try:
+        import matplotlib.patches as mpatches
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise RuntimeError("matplotlib is required to create plots (pip install matplotlib)") from exc
+
+    models = list(stats.keys())
+    if not models:
+        raise ValueError("stats must contain at least one model with benchmark data")
+
+    # Build short keys and legend entries
+    model_keys = [(chr(65 + idx), f"{chr(65 + idx)}: {m.name[:60]}") for idx, m in enumerate(models)]
+
+    # Dataset is a list per model of total_time values
+    dataset = [[d.total_time for d in stats[m]] for m in models]
+
+    # Build colors and mapping using existing helper
+    colors, model_to_color = _build_colors(model_keys)
+
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+
+    # Draw the boxplot using the short keys as x labels
+    _draw_boxplot(ax, dataset, [k[0] for k in model_keys], colors, "Total Time (s)", "Seconds")
+
+    legend_handles = [mpatches.Patch(facecolor=model_to_color[k[0]], edgecolor="black", label=k[1]) for k in model_keys]
+
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        ncol=2,
+    )
+
     fig.savefig(save_path)
